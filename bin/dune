@@ -1,0 +1,9 @@
+(executable
+ (public_name forth)
+ (name main)
+ (libraries forth))
+
+(env
+  (dev
+    (flags (:standard -w -32 -w -37))))
+
