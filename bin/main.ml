@@ -1,5 +1,3 @@
-
-
 module TokenPrinter = struct
   let token_to_string token =
     match token with
@@ -20,32 +18,31 @@ module TokenPrinter = struct
     Printf.printf " ]\n"
 end
 
-
 let print_error (msg : string) (text : Parser.program_text) =
-  Printf.printf "Line: %d Position: %d Error: %s\n\n" text.current_line text.current_position msg;
+  Printf.printf "Line: %d Position: %d Error: %s\n\n" text.current_line
+    text.current_position msg;
   Printf.printf "   %s\n" (List.nth text.lines text.current_line);
   Printf.printf "    %s^\n" (String.make text.current_position ' ')
 
-
-
-let () = 
+let () =
   print_endline "static-forth 0.0.1";
   print_endline "Type Ctrl-C to exit";
-  let state = { Interpreter.stack = []; dictionary = Interpreter.get_standard_dict (); Interpreter.scope_end = [] } in
+  let state =
+    {
+      Interpreter.stack = [];
+      dictionary = Interpreter.get_standard_dict ();
+      Interpreter.scope_end = [];
+    }
+  in
   let rec loop state =
     print_string "> ";
     let line = read_line () in
     try
       let tokens = Parser.parse line in
       TokenPrinter.print_tokens tokens;
-      loop @@ Interpreter.run_statement tokens 0 state;
-      
-    with
-    | Parser.LexerError (msg, text) -> print_error msg text;
-      loop state in
+      loop @@ Interpreter.run_statement tokens 0 state
+    with Parser.LexerError (msg, text) ->
+      print_error msg text;
+      loop state
+  in
   loop state
-
-
-
-
-
