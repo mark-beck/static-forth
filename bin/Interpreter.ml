@@ -4,7 +4,7 @@ type stack_value = Number of int | String of string | Bool of bool
 
 and dictionary_value =
   | Builtin of (state -> state)
-  | UserDefined of Parser.t list
+  | UserDefined of Lexer.t list
   | Link of string
 
 and state = {
@@ -159,22 +159,22 @@ let get pos tokens = try Option.some @@ List.nth tokens pos with _ -> None
 
 let rec run_statement tokens pos state =
   match get pos tokens with
-  | Some (Parser.Number n) ->
+  | Some (Lexer.Number n) ->
       run_statement tokens (pos + 1)
         { state with stack = Number n :: state.stack }
-  | Some (Parser.String s) ->
+  | Some (Lexer.String s) ->
       run_statement tokens (pos + 1)
         { state with stack = String s :: state.stack }
-  | Some (Parser.Word word) ->
+  | Some (Lexer.Word word) ->
       run_statement tokens (pos + 1) (run_word word state)
-  | Some Parser.Colon ->
+  | Some Lexer.Colon ->
       let pos, state = new_word tokens (pos + 1) state in
       run_statement tokens pos state
-  | Some Parser.Semicolon -> raise @@ Failure "Unexpected ';'"
-  | Some Parser.IF ->
+  | Some Lexer.Semicolon -> raise @@ Failure "Unexpected ';'"
+  | Some Lexer.IF ->
       let state = find_endif tokens (pos + 1) 0 state in
       run_if tokens (pos + 1) state
-  | Some Parser.ENDIF -> run_statement tokens (pos + 1) (dropscope state)
+  | Some Lexer.ENDIF -> run_statement tokens (pos + 1) (dropscope state)
   | Some EOF -> state
   | None -> raise @@ Failure "Out of tokens"
   | _ -> raise @@ Failure "Unexpected token"
@@ -189,21 +189,21 @@ and run_word word state =
 and new_word tokens pos state =
   let word_beeing_defined =
     match get pos tokens with
-    | Some (Parser.Word word) -> word
+    | Some (Lexer.Word word) -> word
     | _ -> raise @@ Failure "Expected identifier after ':'"
   in
   let rec loop tokens pos body =
     match get pos tokens with
-    | Some Parser.Semicolon ->
+    | Some Lexer.Semicolon ->
         ( pos + 1,
           {
             state with
             dictionary =
               SMap.add word_beeing_defined
-                (UserDefined (List.rev (Parser.EOF :: body)))
+                (UserDefined (List.rev (Lexer.EOF :: body)))
                 state.dictionary;
           } )
-    | Some Parser.EOF -> raise @@ Failure "Unexpected EOF"
+    | Some Lexer.EOF -> raise @@ Failure "Unexpected EOF"
     | Some token -> loop tokens (pos + 1) (token :: body)
     | None -> raise @@ Failure "OUT OF TOKENS"
   in
@@ -211,21 +211,21 @@ and new_word tokens pos state =
 
 and find_endif tokens pos scope state =
   match get pos tokens with
-  | Some Parser.IF -> find_endif tokens (pos + 1) (scope + 1) state
-  | Some Parser.ENDIF when scope = 0 ->
+  | Some Lexer.IF -> find_endif tokens (pos + 1) (scope + 1) state
+  | Some Lexer.ENDIF when scope = 0 ->
       { state with scope_end = pos :: state.scope_end }
-  | Some Parser.ENDIF -> find_endif tokens (pos + 1) (scope - 1) state
-  | Some Parser.EOF -> raise @@ Failure "Unexpected EOF"
+  | Some Lexer.ENDIF -> find_endif tokens (pos + 1) (scope - 1) state
+  | Some Lexer.EOF -> raise @@ Failure "Unexpected EOF"
   | Some _ -> find_endif tokens (pos + 1) scope state
   | None -> raise @@ Failure "OUT OF TOKENS"
 
 and find_endwhile tokens pos scope state =
   match get pos tokens with
-  | Some Parser.WHILE -> find_endwhile tokens (pos + 1) (scope + 1) state
-  | Some Parser.ENDWHILE when scope = 0 ->
+  | Some Lexer.WHILE -> find_endwhile tokens (pos + 1) (scope + 1) state
+  | Some Lexer.ENDWHILE when scope = 0 ->
       { state with scope_end = pos :: state.scope_end }
-  | Some Parser.ENDWHILE -> find_endwhile tokens (pos + 1) (scope - 1) state
-  | Some Parser.EOF -> raise @@ Failure "Unexpected EOF"
+  | Some Lexer.ENDWHILE -> find_endwhile tokens (pos + 1) (scope - 1) state
+  | Some Lexer.EOF -> raise @@ Failure "Unexpected EOF"
   | Some _ -> find_endwhile tokens (pos + 1) scope state
   | None -> raise @@ Failure "OUT OF TOKENS"
 

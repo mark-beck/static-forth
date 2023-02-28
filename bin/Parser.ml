@@ -1,114 +1,177 @@
-type t =
-  | Number of int
-  | String of string
-  | Word of string
-  | IF
-  | ENDIF
-  | WHILE
-  | ENDWHILE
-  | Colon
-  | Semicolon
-  | EOF
+type ftype =
+  | TWord
+  | TNumber
+  | TString
+  | TBool
+  | TList of ftype
+  | TNever
+  | TUnit
 
-type program_text = {
-  lines : string list;
-  current_line : int;
-  current_position : int;
+and worddef = {
+  name : string;
+  types_in : ftype list;
+  types_out : ftype list;
+  tokens : astnode list;
 }
 
-exception LexerError of string * program_text
+and astnode =
+  | Worddef of worddef
+  | Wordcall of string
+  | String of string
+  | Number of int
+  | If of astnode list
+  | Ifelse of astnode list * astnode list
+  | While of astnode list
 
-let current program_text =
-  try
-    let line = List.nth program_text.lines program_text.current_line in
-    Option.some @@ String.get line program_text.current_position
-  with _ -> None
-
-let peek n program_text =
-  try
-    let line = List.nth program_text.lines program_text.current_line in
-    Option.some @@ String.get line (program_text.current_position + n)
-  with _ -> None
-
-let skip n program_text =
-  let line = List.nth program_text.lines program_text.current_line in
-  let new_position = program_text.current_position + n in
-  if new_position >= String.length line then
-    {
-      lines = program_text.lines;
-      current_line = program_text.current_line + 1;
-      current_position = 0;
-    }
-  else
-    {
-      lines = program_text.lines;
-      current_line = program_text.current_line;
-      current_position = new_position;
-    }
-
-let next program_text = skip 1 program_text
-
-let check_is_word word text =
-  let rec loop text i =
-    if i >= String.length word then true
-    else
-      match current text with
-      | Some c when Char.lowercase_ascii c = Char.lowercase_ascii word.[i] ->
-          loop (next text) (i + 1)
-      | _ -> false
+let display_nodes =
+  let rec display_node (node : astnode) =
+    match node with
+    | Worddef worddef ->
+        Printf.printf "Worddef %s [" worddef.name;
+        List.iter
+          (fun token ->
+            display_node token;
+            Printf.printf " ")
+          worddef.tokens;
+        Printf.printf "]"
+    | Wordcall word -> Printf.printf "Wordcall %s" word
+    | String str -> Printf.printf "String %s" str
+    | Number num -> Printf.printf "Number %d" num
+    | If nodes ->
+        Printf.printf "If [";
+        List.iter
+          (fun node ->
+            display_node node;
+            Printf.printf " ")
+          nodes;
+        Printf.printf "]"
+    | Ifelse (nodes1, nodes2) ->
+        Printf.printf "Ifelse [";
+        List.iter
+          (fun node ->
+            display_node node;
+            Printf.printf " ")
+          nodes1;
+        Printf.printf "] [";
+        List.iter
+          (fun node ->
+            display_node node;
+            Printf.printf " ")
+          nodes2;
+        Printf.printf "]"
+    | While nodes ->
+        Printf.printf "While [";
+        List.iter
+          (fun node ->
+            display_node node;
+            Printf.printf " ")
+          nodes;
+        Printf.printf "]"
   in
-  loop text 0
+  List.iter (fun node ->
+      display_node node;
+      Printf.printf "\n")
 
-let rec lex text res =
-  match current text with
-  | Some ' ' -> lex (next text) res
-  | Some ':' -> lex (next text) (Colon :: res)
-  | Some ';' -> lex (next text) (Semicolon :: res)
-  | Some '0' .. '9' ->
-      let num, text = consume_number text [] in
-      lex text (Number num :: res)
-  | Some '"' ->
-      let str, xs = consume_string (next text) [] in
-      lex xs (String str :: res)
-  | Some _ when check_is_word "if" text -> lex (skip 2 text) (IF :: res)
-  | Some _ when check_is_word "endif" text -> lex (skip 5 text) (ENDIF :: res)
-  | Some _ when check_is_word "while" text -> lex (skip 5 text) (WHILE :: res)
-  | Some _ when check_is_word "endwhile" text ->
-      lex (skip 8 text) (ENDWHILE :: res)
-  | Some _ ->
-      let word, xs = consume_word text [] in
-      lex xs (Word word :: res)
-  | None -> List.rev (EOF :: res)
+let get pos tokens = try Option.some @@ List.nth tokens pos with _ -> None
 
-and consume_number text res =
-  match current text with
-  | Some ('0' .. '9' as c) -> consume_number (next text) (c :: res)
-  | Some ' ' | Some ';' | None ->
-      ( res |> List.rev
-        |> List.map (String.make 1)
-        |> String.concat "" |> int_of_string,
-        text )
-  | Some _ ->
-      raise @@ LexerError ("Unexpected character while parsing number", text)
+let rec parse_worddef (tokens : Lexer.t list) pos =
+  let word_beeing_defined =
+    match get pos tokens with
+    | Some (Lexer.Word word) -> word
+    | _ -> raise @@ Failure "Expected identifier after ':'"
+  in
+  let rec loop tokens pos body =
+    match get pos tokens with
+    | Some (Lexer.Word word) -> loop tokens (pos + 1) (Wordcall word :: body)
+    | Some (Lexer.String str) -> loop tokens (pos + 1) (String str :: body)
+    | Some (Lexer.Number num) -> loop tokens (pos + 1) (Number num :: body)
+    | Some Lexer.IF ->
+        let pos, node = parse_if tokens (pos + 1) in
+        loop tokens pos (node :: body)
+    | Some Lexer.WHILE ->
+        let pos, node = parse_while tokens (pos + 1) in
+        loop tokens pos (node :: body)
+    | Some Lexer.Colon ->
+        let pos, node = parse_worddef tokens pos in
+        loop tokens pos (node :: body)
+    | Some Lexer.Semicolon ->
+        ( pos + 1,
+          Worddef
+            {
+              name = word_beeing_defined;
+              types_in = [];
+              types_out = [];
+              tokens = List.rev body;
+            } )
+    | Some Lexer.EOF -> raise @@ Failure "Unexpected EOF"
+    | Some _ -> raise @@ Failure "Unexpected token"
+    | None -> raise @@ Failure "OUT OF TOKENS"
+  in
+  loop tokens (pos + 1) []
 
-and consume_string text res =
-  match current text with
-  | Some '"' ->
-      if peek 1 text = Some ' ' || peek 1 text = Some ';' || peek 1 text = None
-      then
-        (* after string you can only have whitespace, ; or EOF *)
-        ( res |> List.rev |> List.map (String.make 1) |> String.concat "",
-          next text )
-      else raise @@ LexerError ("Unexpected character after string", text)
-  | Some (_ as x) -> consume_string (next text) (x :: res)
-  | None ->
-      raise @@ LexerError ("Unexpected end of file while parsing string", text)
+and parse_if tokens pos =
+  let rec loop tokens pos body =
+    match get pos tokens with
+    | Some (Lexer.Word word) -> loop tokens (pos + 1) (Wordcall word :: body)
+    | Some (Lexer.String str) -> loop tokens (pos + 1) (String str :: body)
+    | Some (Lexer.Number num) -> loop tokens (pos + 1) (Number num :: body)
+    | Some Lexer.IF ->
+        let pos, node = parse_if tokens (pos + 1) in
+        loop tokens pos (node :: body)
+    | Some Lexer.WHILE ->
+        let pos, node = parse_while tokens (pos + 1) in
+        loop tokens pos (node :: body)
+    | Some Lexer.Colon ->
+        let pos, node = parse_worddef tokens pos in
+        loop tokens pos (node :: body)
+    | Some Lexer.ENDIF -> (pos + 1, If (List.rev body))
+    | Some Lexer.EOF -> raise @@ Failure "Unexpected EOF"
+    | Some _ -> raise @@ Failure "Unexpected token"
+    | None -> raise @@ Failure "OUT OF TOKENS"
+  in
+  loop tokens pos []
 
-and consume_word text res =
-  match current text with
-  | Some ' ' | Some ';' | None ->
-      (res |> List.rev |> List.map (String.make 1) |> String.concat "", text)
-  | Some (_ as x) -> consume_word (next text) (x :: res)
+and parse_while tokens pos =
+  let rec loop tokens pos body =
+    match get pos tokens with
+    | Some (Lexer.Word word) -> loop tokens (pos + 1) (Wordcall word :: body)
+    | Some (Lexer.String str) -> loop tokens (pos + 1) (String str :: body)
+    | Some (Lexer.Number num) -> loop tokens (pos + 1) (Number num :: body)
+    | Some Lexer.IF ->
+        let pos, node = parse_if tokens (pos + 1) in
+        loop tokens pos (node :: body)
+    | Some Lexer.WHILE ->
+        let pos, node = parse_while tokens (pos + 1) in
+        loop tokens pos (node :: body)
+    | Some Lexer.Colon ->
+        let pos, node = parse_worddef tokens pos in
+        loop tokens pos (node :: body)
+    | Some Lexer.ENDWHILE -> (pos + 1, If (List.rev body))
+    | Some Lexer.EOF -> raise @@ Failure "Unexpected EOF"
+    | Some _ -> raise @@ Failure "Unexpected token"
+    | None -> raise @@ Failure "OUT OF TOKENS"
+  in
+  loop tokens pos []
 
-let parse str =
-  lex { lines = [ str ]; current_line = 0; current_position = 0 } []
+and parse_statement tokens pos nodes =
+  match get pos tokens with
+  | Some (Lexer.Word word) ->
+      parse_statement tokens (pos + 1) (Wordcall word :: nodes)
+  | Some (Lexer.String str) ->
+      parse_statement tokens (pos + 1) (String str :: nodes)
+  | Some (Lexer.Number num) ->
+      parse_statement tokens (pos + 1) (Number num :: nodes)
+  | Some Lexer.IF ->
+      let pos, node = parse_if tokens (pos + 1) in
+      parse_statement tokens pos (node :: nodes)
+  | Some Lexer.WHILE ->
+      let pos, node = parse_while tokens (pos + 1) in
+      parse_statement tokens pos (node :: nodes)
+  | Some Lexer.Colon ->
+      let pos, node = parse_worddef tokens (pos + 1) in
+      parse_statement tokens pos (node :: nodes)
+  | Some Lexer.EOF -> List.rev nodes
+  | Some _ -> raise @@ Failure "Unexpected token"
+  | None -> raise @@ Failure "OUT OF TOKENS"
+
+and parse tokens = parse_statement tokens 0 []
