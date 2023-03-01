@@ -139,7 +139,7 @@ and parse_while tokens pos =
     | Some Lexer.Colon ->
         let pos, node = parse_worddef tokens pos in
         loop tokens pos (node :: body)
-    | Some Lexer.ENDWHILE -> (pos + 1, If (List.rev body))
+    | Some Lexer.ENDWHILE -> (pos + 1, While (List.rev body))
     | Some Lexer.EOF -> raise @@ Failure "Unexpected EOF"
     | Some _ -> raise @@ Failure "Unexpected token"
     | None -> raise @@ Failure "OUT OF TOKENS"

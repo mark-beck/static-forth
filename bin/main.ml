@@ -33,10 +33,12 @@ let () =
     let line = read_line () in
     try
       let tokens = Lexer.lex line in
-      TokenPrinter.print_tokens tokens;
+      (* TokenPrinter.print_tokens tokens; *)
       let nodes = Parser.parse tokens in
-      Parser.display_nodes nodes;
-      loop @@ Interpreter.run_statement nodes 0 state
+      (* Parser.display_nodes nodes; *)
+      let state = Interpreter.run_statement nodes 0 state in
+      FTypes.print_stack state.stack;
+      loop state
     with Lexer.LexerError (msg, text) ->
       print_error msg text;
       loop state

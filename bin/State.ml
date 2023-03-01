@@ -93,6 +93,29 @@ let get_standard_dict () =
         type_out = [ TNumber ];
       };
       {
+        name = "eq";
+        impl =
+          Builtin
+            (fun state ->
+              match state.stack with
+              | VNumber a :: VNumber b :: xs ->
+                  { state with stack = VBool (a = b) :: xs }
+              | _ -> raise @@ Failure "Stack underflow");
+        type_in = [ TNumber; TNumber ];
+        type_out = [ TBool ];
+      };
+      {
+        name = "not";
+        impl =
+          Builtin
+            (fun state ->
+              match state.stack with
+              | VBool a :: xs -> { state with stack = VBool (not a) :: xs }
+              | _ -> raise @@ Failure "Stack underflow");
+        type_in = [ TBool ];
+        type_out = [ TBool ];
+      };
+      {
         name = "dup";
         impl =
           Builtin
@@ -126,18 +149,57 @@ let get_standard_dict () =
         type_out = [ TAny; TAny ];
       };
       {
+        name = "over";
+        impl =
+          Builtin
+            (fun state ->
+              match state.stack with
+              | a :: b :: xs -> { state with stack = a :: b :: a :: xs }
+              | _ -> raise @@ Failure "Stack underflow");
+        type_in = [ TAny; TAny ];
+        type_out = [ TAny; TAny; TAny ];
+      };
+      {
+        name = "rot3";
+        impl =
+          Builtin
+            (fun state ->
+              match state.stack with
+              | a :: b :: c :: xs -> { state with stack = b :: c :: a :: xs }
+              | _ -> raise @@ Failure "Stack underflow");
+        type_in = [ TAny; TAny; TAny ];
+        type_out = [ TAny; TAny; TAny ];
+      };
+      {
+        name = "rot4";
+        impl =
+          Builtin
+            (fun state ->
+              match state.stack with
+              | a :: b :: c :: d :: xs -> { state with stack = b :: c :: d :: a :: xs }
+              | _ -> raise @@ Failure "Stack underflow");
+        type_in = [ TAny; TAny; TAny; TAny ];
+        type_out = [ TAny; TAny; TAny; TAny ];
+      };
+      {
         name = "print";
         impl =
           Builtin
             (fun state ->
               match state.stack with
               | a :: xs ->
-                  print_string @@ stack_value_to_string a;
+                  print_endline @@ stack_value_to_string a;
                   { state with stack = xs }
               | _ -> raise @@ Failure "Stack underflow");
         type_in = [ TAny ];
         type_out = [];
       };
+      {
+        name = "clear";
+        impl = Builtin (fun state -> { state with stack = [] });
+        type_in = [];
+        type_out = [];
+      }
     ]
   in
   List.fold_left (fun acc word -> SMap.add word.name word acc) SMap.empty words
