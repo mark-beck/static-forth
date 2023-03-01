@@ -27,22 +27,16 @@ let print_error (msg : string) (text : Lexer.program_text) =
 let () =
   print_endline "static-forth 0.0.1";
   print_endline "Type Ctrl-C to exit";
-  let state =
-    {
-      Interpreter.stack = [];
-      dictionary = Interpreter.get_standard_dict ();
-      Interpreter.scope_end = [];
-    }
-  in
+  let state = { State.stack = []; dictionary = State.get_standard_dict () } in
   let rec loop state =
-    print_string "> ";
+    print_string "\n> ";
     let line = read_line () in
     try
       let tokens = Lexer.lex line in
       TokenPrinter.print_tokens tokens;
       let nodes = Parser.parse tokens in
       Parser.display_nodes nodes;
-      loop @@ Interpreter.run_statement tokens 0 state
+      loop @@ Interpreter.run_statement nodes 0 state
     with Lexer.LexerError (msg, text) ->
       print_error msg text;
       loop state

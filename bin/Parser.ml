@@ -1,17 +1,10 @@
-type ftype =
-  | TWord
-  | TNumber
-  | TString
-  | TBool
-  | TList of ftype
-  | TNever
-  | TUnit
+open FTypes
 
-and worddef = {
+type worddef = {
   name : string;
   types_in : ftype list;
   types_out : ftype list;
-  tokens : astnode list;
+  nodes : astnode list;
 }
 
 and astnode =
@@ -20,7 +13,7 @@ and astnode =
   | String of string
   | Number of int
   | If of astnode list
-  | Ifelse of astnode list * astnode list
+  | Ifelse of (astnode list * astnode list)
   | While of astnode list
 
 let display_nodes =
@@ -32,7 +25,7 @@ let display_nodes =
           (fun token ->
             display_node token;
             Printf.printf " ")
-          worddef.tokens;
+          worddef.nodes;
         Printf.printf "]"
     | Wordcall word -> Printf.printf "Wordcall %s" word
     | String str -> Printf.printf "String %s" str
@@ -101,7 +94,7 @@ let rec parse_worddef (tokens : Lexer.t list) pos =
               name = word_beeing_defined;
               types_in = [];
               types_out = [];
-              tokens = List.rev body;
+              nodes = List.rev body;
             } )
     | Some Lexer.EOF -> raise @@ Failure "Unexpected EOF"
     | Some _ -> raise @@ Failure "Unexpected token"

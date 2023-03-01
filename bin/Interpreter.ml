@@ -1,252 +1,63 @@
 module SMap = Map.Make (String)
+open State
+open FTypes
 
-type stack_value = Number of int | String of string | Bool of bool
+let get pos nodes = try Option.some @@ List.nth nodes pos with _ -> None
 
-and dictionary_value =
-  | Builtin of (state -> state)
-  | UserDefined of Lexer.t list
-  | Link of string
-
-and state = {
-  stack : stack_value list;
-  dictionary : dictionary_value SMap.t;
-  scope_end : int list;
-}
-
-let get_standard_dict () =
-  let dict = SMap.empty in
-  let dict =
-    SMap.add "T"
-      (Builtin (fun state -> { state with stack = Bool true :: state.stack }))
-      dict
-  in
-  let dict =
-    SMap.add "F"
-      (Builtin (fun state -> { state with stack = Bool false :: state.stack }))
-      dict
-  in
-  let dict =
-    SMap.add "add"
-      (Builtin
-         (fun state ->
-           match state.stack with
-           | Number a :: Number b :: xs ->
-               { state with stack = Number (a + b) :: xs }
-           | _ -> raise @@ Failure "Stack underflow"))
-      dict
-  in
-  let dict =
-    SMap.add "sub"
-      (Builtin
-         (fun state ->
-           match state.stack with
-           | Number a :: Number b :: xs ->
-               { state with stack = Number (a - b) :: xs }
-           | _ -> raise @@ Failure "Stack underflow"))
-      dict
-  in
-  let dict =
-    SMap.add "mul"
-      (Builtin
-         (fun state ->
-           match state.stack with
-           | Number a :: Number b :: xs ->
-               { state with stack = Number (a * b) :: xs }
-           | _ -> raise @@ Failure "Stack underflow"))
-      dict
-  in
-  let dict =
-    SMap.add "div"
-      (Builtin
-         (fun state ->
-           match state.stack with
-           | Number a :: Number b :: xs ->
-               { state with stack = Number (a / b) :: xs }
-           | _ -> raise @@ Failure "Stack underflow"))
-      dict
-  in
-  let dict =
-    SMap.add "dup"
-      (Builtin
-         (fun state ->
-           match state.stack with
-           | x :: xs -> { state with stack = x :: x :: xs }
-           | _ -> raise @@ Failure "Stack underflow"))
-      dict
-  in
-  let dict =
-    SMap.add "drop"
-      (Builtin
-         (fun state ->
-           match state.stack with
-           | _ :: xs -> { state with stack = xs }
-           | _ -> raise @@ Failure "Stack underflow"))
-      dict
-  in
-  let dict =
-    SMap.add "swap"
-      (Builtin
-         (fun state ->
-           match state.stack with
-           | a :: b :: xs -> { state with stack = b :: a :: xs }
-           | _ -> raise @@ Failure "Stack underflow"))
-      dict
-  in
-  let dict =
-    SMap.add "rot"
-      (Builtin
-         (fun state ->
-           match state.stack with
-           | a :: b :: c :: xs -> { state with stack = c :: a :: b :: xs }
-           | _ -> raise @@ Failure "Stack underflow"))
-      dict
-  in
-  let dict =
-    SMap.add "print"
-      (Builtin
-         (fun state ->
-           match state.stack with
-           | Number n :: xs ->
-               print_int n;
-               print_newline ();
-               { state with stack = xs }
-           | String s :: xs ->
-               print_string s;
-               print_newline ();
-               { state with stack = xs }
-           | Bool b :: xs ->
-               print_string (if b then "true" else "false");
-               print_newline ();
-               { state with stack = xs }
-           | _ -> raise @@ Failure "Stack underflow in print"))
-      dict
-  in
-  let dict =
-    SMap.add "print_stack"
-      (Builtin
-         (fun state ->
-           state.stack
-           |> List.iter (function
-                | Number n ->
-                    print_int n;
-                    print_string " "
-                | String s ->
-                    print_string s;
-                    print_string " "
-                | Bool b ->
-                    print_string (if b then "true" else "false");
-                    print_string " ");
-           print_newline ();
-           state))
-      dict
-  in
-  let dict =
-    SMap.add "print_dict"
-      (Builtin
-         (fun state ->
-           SMap.iter
-             (fun k _ ->
-               print_string k;
-               print_string " ")
-             state.dictionary;
-           print_newline ();
-           state))
-      dict
-  in
-  dict
-
-let get pos tokens = try Option.some @@ List.nth tokens pos with _ -> None
-
-let rec run_statement tokens pos state =
-  match get pos tokens with
-  | Some (Lexer.Number n) ->
-      run_statement tokens (pos + 1)
-        { state with stack = Number n :: state.stack }
-  | Some (Lexer.String s) ->
-      run_statement tokens (pos + 1)
-        { state with stack = String s :: state.stack }
-  | Some (Lexer.Word word) ->
-      run_statement tokens (pos + 1) (run_word word state)
-  | Some Lexer.Colon ->
-      let pos, state = new_word tokens (pos + 1) state in
-      run_statement tokens pos state
-  | Some Lexer.Semicolon -> raise @@ Failure "Unexpected ';'"
-  | Some Lexer.IF ->
-      let state = find_endif tokens (pos + 1) 0 state in
-      run_if tokens (pos + 1) state
-  | Some Lexer.ENDIF -> run_statement tokens (pos + 1) (dropscope state)
-  | Some EOF -> state
-  | None -> raise @@ Failure "Out of tokens"
-  | _ -> raise @@ Failure "Unexpected token"
+let rec run_statement nodes pos state =
+  match get pos nodes with
+  | Some (Parser.Worddef worddef) ->
+      run_statement nodes (pos + 1) (State.add_word worddef state)
+  | Some (Parser.Wordcall word) ->
+      run_statement nodes (pos + 1) (run_word word state)
+  | Some (Parser.If ifdef) -> run_statement nodes (pos + 1) (run_if ifdef state)
+  | Some (Parser.While whiledef) ->
+      run_statement nodes (pos + 1) (run_while whiledef state)
+  | Some (Parser.Ifelse (thenblock, elseblock)) ->
+      run_statement nodes (pos + 1) (run_ifelse thenblock elseblock state)
+  | Some (Parser.Number _ as n) -> run_statement nodes (pos + 1) (push n state)
+  | Some (Parser.String _ as s) -> run_statement nodes (pos + 1) (push s state)
+  | None -> state
 
 and run_word word state =
-  match SMap.find_opt word state.dictionary with
-  | Some (Builtin f) -> f state
-  | Some (UserDefined tokens) -> run_statement tokens 0 state
-  | Some (Link link) -> run_word link state
+  let word = SMap.find_opt word state.dictionary in
+  match word with
+  | Some { impl = Builtin f; _ } -> f state
+  | Some { impl = User tokens; _ } -> run_statement tokens 0 state
   | None -> raise @@ Failure "Word not found"
 
-and new_word tokens pos state =
-  let word_beeing_defined =
-    match get pos tokens with
-    | Some (Lexer.Word word) -> word
-    | _ -> raise @@ Failure "Expected identifier after ':'"
-  in
-  let rec loop tokens pos body =
-    match get pos tokens with
-    | Some Lexer.Semicolon ->
-        ( pos + 1,
-          {
-            state with
-            dictionary =
-              SMap.add word_beeing_defined
-                (UserDefined (List.rev (Lexer.EOF :: body)))
-                state.dictionary;
-          } )
-    | Some Lexer.EOF -> raise @@ Failure "Unexpected EOF"
-    | Some token -> loop tokens (pos + 1) (token :: body)
-    | None -> raise @@ Failure "OUT OF TOKENS"
-  in
-  loop tokens (pos + 1) []
+and run_if block state =
+  let state, condition = pop state in
+  match condition with
+  | VBool true -> run_statement block 0 state
+  | VBool false -> state
+  | _ -> raise @@ Failure "Not a boolean on stack for if"
 
-and find_endif tokens pos scope state =
-  match get pos tokens with
-  | Some Lexer.IF -> find_endif tokens (pos + 1) (scope + 1) state
-  | Some Lexer.ENDIF when scope = 0 ->
-      { state with scope_end = pos :: state.scope_end }
-  | Some Lexer.ENDIF -> find_endif tokens (pos + 1) (scope - 1) state
-  | Some Lexer.EOF -> raise @@ Failure "Unexpected EOF"
-  | Some _ -> find_endif tokens (pos + 1) scope state
-  | None -> raise @@ Failure "OUT OF TOKENS"
+and run_while block state =
+  let state, condition = pop state in
+  match condition with
+  | VBool true -> run_while block @@ run_statement block 0 state
+  | VBool false -> state
+  | _ -> raise @@ Failure "Not a boolean on stack for while"
 
-and find_endwhile tokens pos scope state =
-  match get pos tokens with
-  | Some Lexer.WHILE -> find_endwhile tokens (pos + 1) (scope + 1) state
-  | Some Lexer.ENDWHILE when scope = 0 ->
-      { state with scope_end = pos :: state.scope_end }
-  | Some Lexer.ENDWHILE -> find_endwhile tokens (pos + 1) (scope - 1) state
-  | Some Lexer.EOF -> raise @@ Failure "Unexpected EOF"
-  | Some _ -> find_endwhile tokens (pos + 1) scope state
-  | None -> raise @@ Failure "OUT OF TOKENS"
+and run_ifelse thenblock elseblock state =
+  let newstate, condition = pop state in
+  match condition with
+  | VBool true -> run_statement thenblock 0 newstate
+  | VBool false -> run_statement elseblock 0 newstate
+  | _ -> raise @@ Failure "Not a boolean on stack for ifelse"
 
-and dropscope state =
-  match state.scope_end with
-  | _ :: xs -> { state with scope_end = xs }
-  | _ -> raise @@ Failure "Not in scope"
-
-and get_jumppoint state =
-  match state.scope_end with
-  | x :: _ -> x
-  | _ -> raise @@ Failure "Not in scope"
-
-and run_if tokens pos state =
+and pop state =
   match state.stack with
   | [] -> raise @@ Failure "Stack underflow"
-  | Bool true :: xs ->
-      let state = { state with stack = xs } in
-      run_statement tokens pos state
-  | Bool false :: xs ->
-      let jumppoint = get_jumppoint state in
-      let state = { state with stack = xs } in
-      run_statement tokens jumppoint state
-  | _ -> raise @@ Failure "Expected boolean on stack"
+  | x :: xs -> ({ state with stack = xs }, x)
+
+and push value state =
+  match value with
+  | Parser.Number n -> { state with stack = VNumber n :: state.stack }
+  | Parser.String s -> { state with stack = VString s :: state.stack }
+  | _ -> raise @@ Failure "Invalid value to push"
+
+let run tokens =
+  let state = { stack = []; dictionary = SMap.empty } in
+  run_statement tokens 0 state
