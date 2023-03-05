@@ -1,9 +1,9 @@
-open FTypes
+open Types
 
 type worddef = {
   name : string;
-  types_in : ftype list;
-  types_out : ftype list;
+  types_in : Ftype.t list;
+  types_out : Ftype.t list;
   nodes : astnode list;
 }
 

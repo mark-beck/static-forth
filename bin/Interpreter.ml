@@ -1,6 +1,6 @@
 module SMap = Map.Make (String)
 open State
-open FTypes
+open Types.Vtype
 
 exception InterpretError of string
 

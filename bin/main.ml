@@ -36,11 +36,16 @@ let () =
       (* TokenPrinter.print_tokens tokens; *)
       let nodes = Parser.parse tokens in
       (* Parser.display_nodes nodes; *)
+      let _typecheck_result = Typechecker.typecheck nodes in
       let state = Interpreter.run_statement nodes 0 state in
-      FTypes.print_stack state.stack;
+      State.print_stack state.stack;
       loop state
-    with Lexer.LexerError (msg, text) ->
+    with 
+    | Lexer.LexerError (msg, text) ->
       print_error msg text;
+      loop state
+    | Typechecker.TypecheckException msg ->
+      print_string msg;
       loop state
   in
   loop state
