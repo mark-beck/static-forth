@@ -37,7 +37,7 @@ let get_standard_dict () =
         impl =
           Builtin
             (fun state -> { state with stack = VBool true :: state.stack });
-  in_types = [];
+        in_types = [];
         out_types = [ TBool ];
       };
       {
@@ -45,7 +45,7 @@ let get_standard_dict () =
         impl =
           Builtin
             (fun state -> { state with stack = VBool false :: state.stack });
-  in_types = [];
+        in_types = [];
         out_types = [ TBool ];
       };
       {
@@ -57,7 +57,7 @@ let get_standard_dict () =
               | VNumber a :: VNumber b :: xs ->
                   { state with stack = VNumber (a + b) :: xs }
               | _ -> raise @@ Failure "Stack underflow");
-              in_types = [ TNumber; TNumber ];
+        in_types = [ TNumber; TNumber ];
         out_types = [ TNumber ];
       };
       {
@@ -69,7 +69,7 @@ let get_standard_dict () =
               | VNumber a :: VNumber b :: xs ->
                   { state with stack = VNumber (a - b) :: xs }
               | _ -> raise @@ Failure "Stack underflow");
-              in_types = [ TNumber; TNumber ];
+        in_types = [ TNumber; TNumber ];
         out_types = [ TNumber ];
       };
       {
@@ -81,7 +81,7 @@ let get_standard_dict () =
               | VNumber a :: VNumber b :: xs ->
                   { state with stack = VNumber (a * b) :: xs }
               | _ -> raise @@ Failure "Stack underflow");
-              in_types = [ TNumber; TNumber ];
+        in_types = [ TNumber; TNumber ];
         out_types = [ TNumber ];
       };
       {
@@ -93,7 +93,7 @@ let get_standard_dict () =
               | VNumber a :: VNumber b :: xs ->
                   { state with stack = VNumber (a / b) :: xs }
               | _ -> raise @@ Failure "Stack underflow");
-              in_types = [ TNumber; TNumber ];
+        in_types = [ TNumber; TNumber ];
         out_types = [ TNumber ];
       };
       {
@@ -105,7 +105,7 @@ let get_standard_dict () =
               | VNumber a :: VNumber b :: xs ->
                   { state with stack = VBool (a = b) :: xs }
               | _ -> raise @@ Failure "Stack underflow");
-              in_types = [ TNumber; TNumber ];
+        in_types = [ TNumber; TNumber ];
         out_types = [ TBool ];
       };
       {
@@ -116,7 +116,7 @@ let get_standard_dict () =
               match state.stack with
               | VBool a :: xs -> { state with stack = VBool (not a) :: xs }
               | _ -> raise @@ Failure "Stack underflow");
-            in_types = [ TBool ];
+        in_types = [ TBool ];
         out_types = [ TBool ];
       };
       {
@@ -127,7 +127,7 @@ let get_standard_dict () =
               match state.stack with
               | x :: xs -> { state with stack = x :: x :: xs }
               | _ -> raise @@ Failure "Stack underflow");
-            in_types = [ TGen "a" ];
+        in_types = [ TGen "a" ];
         out_types = [ TGen "a"; TGen "a" ];
       };
       {
@@ -138,7 +138,7 @@ let get_standard_dict () =
               match state.stack with
               | _ :: xs -> { state with stack = xs }
               | _ -> raise @@ Failure "Stack underflow");
-            in_types = [ TAny ];
+        in_types = [ TAny ];
         out_types = [];
       };
       {
@@ -149,7 +149,7 @@ let get_standard_dict () =
               match state.stack with
               | a :: b :: xs -> { state with stack = b :: a :: xs }
               | _ -> raise @@ Failure "Stack underflow");
-            in_types = [ TGen "a"; TGen "b" ];
+        in_types = [ TGen "a"; TGen "b" ];
         out_types = [ TGen "b"; TGen "a" ];
       };
       {
@@ -160,7 +160,7 @@ let get_standard_dict () =
               match state.stack with
               | a :: b :: xs -> { state with stack = a :: b :: a :: xs }
               | _ -> raise @@ Failure "Stack underflow");
-            in_types = [ TGen "a"; TGen "b" ];
+        in_types = [ TGen "a"; TGen "b" ];
         out_types = [ TGen "a"; TGen "b"; TGen "a" ];
       };
       {
@@ -171,7 +171,7 @@ let get_standard_dict () =
               match state.stack with
               | a :: b :: c :: xs -> { state with stack = b :: c :: a :: xs }
               | _ -> raise @@ Failure "Stack underflow");
-            in_types = [ TGen "a"; TGen "b"; TGen "c" ];
+        in_types = [ TGen "a"; TGen "b"; TGen "c" ];
         out_types = [ TGen "b"; TGen "c"; TGen "a" ];
       };
       {
@@ -180,9 +180,10 @@ let get_standard_dict () =
           Builtin
             (fun state ->
               match state.stack with
-              | a :: b :: c :: d :: xs -> { state with stack = b :: c :: d :: a :: xs }
+              | a :: b :: c :: d :: xs ->
+                  { state with stack = b :: c :: d :: a :: xs }
               | _ -> raise @@ Failure "Stack underflow");
-            in_types = [ TGen "a"; TGen "b"; TGen "c"; TGen "d" ];
+        in_types = [ TGen "a"; TGen "b"; TGen "c"; TGen "d" ];
         out_types = [ TGen "b"; TGen "c"; TGen "d"; TGen "a" ];
       };
       {
@@ -195,15 +196,15 @@ let get_standard_dict () =
                   print_endline @@ Vtype.to_string a;
                   { state with stack = xs }
               | _ -> raise @@ Failure "Stack underflow");
-              in_types = [ TAny ];
+        in_types = [ TAny ];
         out_types = [];
       };
       {
         name = "clear";
         impl = Builtin (fun state -> { state with stack = [] });
-              in_types = [];
+        in_types = [];
         out_types = [];
-      }
+      };
     ]
   in
   List.fold_left (fun acc word -> SMap.add word.name word acc) SMap.empty words

@@ -1,19 +1,17 @@
 module SMap = Map.Make (String)
 
 module Ftype = struct
-  type t = 
-  | TAny
-  | TGen of string
-  | TWord
-  | TNumber
-  | TString
-  | TBool
-  | TList of t
+  type t =
+    | TAny
+    | TGen of string
+    | TWord
+    | TNumber
+    | TString
+    | TBool
+    | TList of t
 
-  let eq t1 t2 =
-    t1 = t2 || t1 = TAny || t2 = TAny
-    
-  let (==) = eq
+  let eq t1 t2 = t1 = t2 || t1 = TAny || t2 = TAny
+  let ( == ) = eq
 
   let rec to_string = function
     | TAny -> "TAny"
@@ -28,7 +26,8 @@ module Ftype = struct
     let open Result in
     let rec subst = function
       | TAny -> Ok TAny
-      | TGen s -> (try ok @@ SMap.find s dict with Not_found -> Result.error @@ TGen s)
+      | TGen s -> (
+          try ok @@ SMap.find s dict with Not_found -> Result.error @@ TGen s)
       | TWord -> Ok TWord
       | TNumber -> Ok TNumber
       | TString -> Ok TString
@@ -42,17 +41,16 @@ module Vtype = struct
   type t = VNumber of int | VString of string | VBool of bool
 
   let eq t1 t2 =
-    match t1, t2 with
+    match (t1, t2) with
     | VNumber v1, VNumber v2 when v1 = v2 -> true
     | VString v1, VString v2 when v1 = v2 -> true
     | VBool v1, VBool v2 when v1 = v2 -> true
     | _ -> false
 
-  let (==) = eq
+  let ( == ) = eq
 
   let to_string = function
     | VNumber n -> string_of_int n
     | VString s -> s
     | VBool b -> string_of_bool b
 end
-
