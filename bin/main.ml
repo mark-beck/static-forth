@@ -51,7 +51,7 @@ let () =
           State.print_stack state.stack;
           loop state typestate
       | Error msg ->
-          print_endline msg;
+          print_endline @@ Typechecker.TypeError.to_string msg;
           let state = Interpreter.run_statement nodes 0 state in
           State.print_stack state.stack;
           loop state typestate

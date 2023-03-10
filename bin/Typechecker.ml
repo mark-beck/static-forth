@@ -1,8 +1,25 @@
 open Types
 open ResultUtils
 
-exception TypecheckException of string
+module TypeError = struct
+  type t =
+    | Missing of string * Ftype.t list
+    | TypeMismatch of string * Ftype.t * Ftype.t
+    | UnknownWord of string * string
+    | UnknownType of string * Ftype.t
+    | Other of string
 
+  let to_string = function
+    | Missing (s, ts) ->
+        s ^ ": " ^ (ts |> List.map Ftype.to_string |> String.concat ", ")
+    | TypeMismatch (s, t1, t2) ->
+        s ^ ": " ^ Ftype.to_string t1 ^ " and " ^ Ftype.to_string t2
+    | UnknownWord (s, w) -> s ^ ": " ^ w
+    | UnknownType (s, t) -> s ^ ": " ^ Ftype.to_string t
+    | Other s -> s
+end
+
+module TE = TypeError
 module SMap = Map.Make (String)
 
 module Typestate = struct
@@ -18,7 +35,10 @@ let resolve_poly_types typestack types_in =
   let rec resolve_poly_types' typestack types_in table =
     match (typestack, types_in) with
     | _, [] -> Ok table
-    | [], _ -> Error "Type stack empty while resolving polymorphic types"
+    | [], t :: _ ->
+        Error
+          (TE.Missing
+             ("Type stack empty while resolving polymorphic types", [ t ]))
     | type_on_stack :: typestack_tl, type_in :: types_in_tl -> (
         match type_in with
         | Ftype.TGen name -> (
@@ -29,11 +49,21 @@ let resolve_poly_types typestack types_in =
             | Some resolved_type ->
                 if resolved_type = type_on_stack then
                   resolve_poly_types' typestack_tl types_in_tl table
-                else Error "Type mismatch while resolving polymorphic types")
+                else
+                  Error
+                    (TypeMismatch
+                       ( "Type mismatch while resolving polymorphic types",
+                         resolved_type,
+                         type_on_stack )))
         | other_t ->
             if Ftype.eq other_t type_on_stack then
               resolve_poly_types' typestack_tl types_in_tl table
-            else Error "Type mismatch while resolving polymorphic types")
+            else
+              Error
+                (TypeMismatch
+                   ( "Type mismatch while resolving polymorphic types",
+                     other_t,
+                     type_on_stack )))
   in
 
   resolve_poly_types' typestack types_in SMap.empty
@@ -47,8 +77,10 @@ let resolve_types_out types_out table =
            let* acc = acc in
            match e with
            | Ok e -> Ok (e :: acc)
-           | Error _ ->
-               Error "Unknown polymorphic type while resolving out_types")
+           | Error t ->
+               Error
+                 (TE.UnknownType
+                    ("Unknown polymorphic type while resolving out_types", t)))
          (Ok [])
   in
   resolved_out
@@ -66,55 +98,85 @@ let apply_word (typestack : Ftype.t list) (word : State.dictionary_value) =
   Ok (List.append typestack resolved_out)
 
 let rec type_node (node : Parser.astnode) (state : Typestate.t) :
-    (Typestate.t, string) Result.t =
+    (Typestate.t, TypeError.t) Result.t =
   let open Parser in
   match node with
-  | Worddef def -> type_worddef state.dict def
+  | Worddef def ->
+      let* typed_def = type_worddef state.dict def in
+      let dict = SMap.add typed_def.name typed_def state.dict in
+      Ok { state with dict }
   | Wordcall word -> (
       try
-        let word = SMap.find word state.dict in
-        let* stack = apply_word state.stack word in
+        let word' = SMap.find word state.dict in
+        let* stack = apply_word state.stack word' in
         Ok { state with stack }
-      with Not_found -> Error "called undefined word")
+      with Not_found -> Error (UnknownWord ("called undefined word", word)))
   | If nodes -> (
       match state.stack with
       | TBool :: xs ->
           let* thenstate = type_nodes nodes { state with stack = xs } in
           if List.equal ( = ) xs thenstate.stack then Ok thenstate
-          else Error "if branch cant have stack effect"
-      | _ -> Error "if needs a Boolean on the stack")
+          else Error (Other "if branch cant have stack effect")
+      | _ ->
+          Error (Missing ("if needs a Boolean on the stack", [ Ftype.TBool ])))
   | Ifelse (thennodes, elsenodes) -> (
       match state.stack with
       | TBool :: xs ->
           let* thenstate = type_nodes thennodes { state with stack = xs } in
           let* elsestate = type_nodes elsenodes { state with stack = xs } in
           if List.equal ( = ) thenstate.stack elsestate.stack then Ok thenstate
-          else Error "if and else branches need to have the same stack effect"
-      | _ -> Error "if needs a Boolean on the stack")
+          else
+            Error
+              (Other "if and else branches need to have the same stack effect")
+      | _ ->
+          Error (Missing ("if needs a Boolean on the stack", [ Ftype.TBool ])))
   | While nodes ->
       let* thenstate = type_nodes nodes state in
       if List.hd thenstate.stack = TBool then Ok thenstate
-      else Error "while branch has to end with a Boolean"
+      else
+        Error
+          (Missing ("while branch has to end with a Boolean", [ Ftype.TBool ]))
   | String _ -> Ok { state with stack = Ftype.TString :: state.stack }
   | Number _ -> Ok { state with stack = Ftype.TNumber :: state.stack }
 
-and type_nodes nodes state : (Typestate.t, string) result =
+and type_nodes nodes state : (Typestate.t, TypeError.t) result =
   match nodes with
   | [] -> Ok state
-  | node :: nodes -> (
-      let typestack = type_node node state in
-      match typestack with
-      | Error e -> Error e
-      | Ok state -> type_nodes nodes state)
+  | node :: nodes ->
+      let* state = type_node node state in
+      type_nodes nodes state
 
-and type_worddef _dict _def = raise @@ Failure "not implemented"
+(**  typecheck a worddef by trying to typecheck its nodes and then iteratively adding the missing types to the input types until it succeeds
+    the remaining typestack is the outtput types **)
+and type_worddef :
+    State.dictionary_value SMap.t ->
+    Parser.worddef ->
+    (State.dictionary_value, TypeError.t) result =
+ fun dict def ->
+  let rec type_worddef' dict nodes in_types =
+    let state = Typestate.{ stack = in_types; dict } in
+    let nodes_result = type_nodes nodes state in
+    match nodes_result with
+    | Ok state ->
+        Ok
+          State.
+            {
+              name = def.name;
+              in_types;
+              out_types = state.stack;
+              impl = User def.nodes;
+            }
+    | Error (Missing (_, ts)) -> type_worddef' dict nodes (ts @ in_types)
+    | Error e -> Error e
+  in
+  type_worddef' dict def.nodes []
 
 let typecheck nodes =
   let dict = State.get_standard_dict () in
   let state = Typestate.{ stack = []; dict } in
   let* state = type_nodes nodes state in
   if List.length state.stack = 0 then Ok ()
-  else Error "Stack not empty after typechecking"
+  else Error (Missing ("Stack not empty after typechecking", state.stack))
 
 let typecheck_part nodes state =
   let* state = type_nodes nodes state in
