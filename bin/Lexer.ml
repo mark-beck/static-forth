@@ -6,6 +6,8 @@ type t =
   | ENDIF
   | WHILE
   | ENDWHILE
+  | FOR
+  | ENDFOR
   | Colon
   | Semicolon
   | EOF
@@ -24,6 +26,8 @@ let show = function
   | ENDIF -> Printf.sprintf "ENDIF"
   | WHILE -> Printf.sprintf "WHILE"
   | ENDWHILE -> Printf.sprintf "ENDWHILE"
+  | FOR -> Printf.sprintf "FOR"
+  | ENDFOR -> Printf.sprintf "ENDFOR"
   | Colon -> Printf.sprintf ":"
   | Semicolon -> Printf.sprintf ";"
   | EOF -> Printf.sprintf "EOF"
@@ -93,6 +97,8 @@ let rec lex text res =
   | Some _ when check_is_word "while" text -> lex (skip 5 text) (WHILE :: res)
   | Some _ when check_is_word "endwhile" text ->
       lex (skip 8 text) (ENDWHILE :: res)
+  | Some _ when check_is_word "for" text -> lex (skip 3 text) (FOR :: res)
+  | Some _ when check_is_word "endfor" text -> lex (skip 6 text) (ENDFOR :: res)
   | Some _ ->
       let word, xs = consume_word text [] in
       lex xs (Word word :: res)
@@ -124,7 +130,7 @@ and consume_string text res =
 
 and consume_word text res =
   match current text with
-  | Some ' ' | Some ';' | None ->
+  | Some ' ' | Some ';' | Some '\n' | None ->
       (res |> List.rev |> List.map (String.make 1) |> String.concat "", text)
   | Some (_ as x) -> consume_word (next text) (x :: res)
 

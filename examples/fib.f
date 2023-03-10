@@ -2,4 +2,6 @@
 
 : sub1 1 sub ;
 
-: printadd  add print ;;
+: printadd  add print ;
+
+: fib 1 0 rot3 for swap over add endfor swap drop;

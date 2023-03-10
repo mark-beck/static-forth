@@ -15,6 +15,8 @@ let rec run_statement nodes pos state =
   | Some (Parser.If ifdef) -> run_statement nodes (pos + 1) (run_if ifdef state)
   | Some (Parser.While whiledef) ->
       run_statement nodes (pos + 1) (run_while whiledef state)
+  | Some (Parser.For fordef) ->
+    run_statement nodes (pos + 1) (run_for fordef @@ push_for_counter state)
   | Some (Parser.Ifelse (thenblock, elseblock)) ->
       run_statement nodes (pos + 1) (run_ifelse thenblock elseblock state)
   | Some (Parser.Number _ as n) -> run_statement nodes (pos + 1) (push n state)
@@ -36,11 +38,20 @@ and run_if block state =
   | _ -> raise @@ InterpretError "Not a boolean on stack for if"
 
 and run_while block state =
+  let state = run_statement block 0 state in
   let state, condition = pop state in
   match condition with
-  | VBool true -> run_while block @@ run_statement block 0 state
   | VBool false -> state
+  | VBool true -> run_while block state
   | _ -> raise @@ InterpretError "Not a boolean on stack for while"
+
+and run_for block state =
+  match get_for_counter state with
+  | 0 -> pop_for_counter state
+  | _ ->
+    let state = run_statement block 0 state in
+    let state = dec_for_counter state in
+    run_for block state
 
 and run_ifelse thenblock elseblock state =
   let newstate, condition = pop state in
@@ -61,5 +72,5 @@ and push value state =
   | _ -> raise @@ InterpretError "Invalid value to push"
 
 let run tokens =
-  let state = { stack = []; dictionary = SMap.empty } in
+  let state = { stack = []; dictionary = SMap.empty; for_counters = [] } in
   run_statement tokens 0 state

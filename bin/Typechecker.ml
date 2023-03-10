@@ -57,16 +57,16 @@ let resolve_poly_types typestack types_in =
                 else
                   Error
                     (TypeMismatch
-                       ( "Type mismatch while resolving polymorphic types",
+                       ( "Type mismatch while resolving polymorphic types 1",
                          resolved_type,
                          type_on_stack )))
         | other_t ->
-            if Ftype.eq other_t type_on_stack then
+            if Ftype.gen_eq other_t type_on_stack then
               resolve_poly_types' typestack_tl types_in_tl table
             else
               Error
                 (TypeMismatch
-                   ( "Type mismatch while resolving polymorphic types",
+                   ( "Type mismatch while resolving polymorphic types 2",
                      other_t,
                      type_on_stack )))
   in
@@ -100,7 +100,7 @@ let apply_word (typestack : Ftype.t list) (word : State.dictionary_value) =
     |> List.of_seq
   in
   let* resolved_out = resolve_types_out word.out_types resolving_table in
-  Ok (List.append typestack resolved_out)
+  Ok (resolved_out @ typestack)
 
 let rec type_node (node : Parser.astnode) (state : Typestate.t) :
     (Typestate.t, TypeError.t) Result.t =
@@ -140,7 +140,14 @@ let rec type_node (node : Parser.astnode) (state : Typestate.t) :
       if List.hd thenstate.stack = TBool then Ok thenstate
       else
         Error
-          (Missing ("while branch has to end with a Boolean", [ Ftype.TBool ]))
+          (Missing ("while branch has to end with a Bool", [ Ftype.TBool ]))
+  | For nodes ->
+    begin match state.stack with
+    | TNumber :: xs -> (
+      let* thenstate = type_nodes nodes { state with stack = xs } in
+      if List.equal Ftype.gen_eq xs thenstate.stack then Ok thenstate
+      else Error (Other "for branch cant have stack effect"))
+    | _ -> Error (Missing ("for needs a Number on the stack", [ Ftype.TNumber ])) end
   | String _ -> Ok { state with stack = Ftype.TString :: state.stack }
   | Number _ -> Ok { state with stack = Ftype.TNumber :: state.stack }
 
@@ -171,7 +178,8 @@ and type_worddef :
               out_types = state.stack;
               impl = User def.nodes;
             }
-    | Error (Missing (_, ts)) -> type_worddef' dict nodes (ts @ in_types)
+    | Error (Missing (_, ts)) when List.length state.stack < 10  -> 
+      type_worddef' dict nodes (ts @ in_types)
     | Error e -> Error e
   in
   type_worddef' dict def.nodes []

@@ -51,9 +51,7 @@ let run_repl mode typestate state =
 let run_file typestate state filedata =
   try 
   let tokens = Lexer.lex filedata in
-  Lexer.print_tokens tokens;
   let nodes = Parser.parse tokens in
-  Parser.print_nodes nodes;
   let typecheck_result = Typechecker.typecheck_part nodes typestate in
   match typecheck_result with
   | Ok typestate ->
@@ -86,7 +84,7 @@ let rec run_files mode typestate state files =
 let () =
   let mode = ArgParser.parse () in
   let typestate = Typechecker.Typestate.{ stack = []; dict = State.get_standard_dict () } in
-  let state = { State.stack = []; dictionary = State.get_standard_dict () } in
+  let state = { State.stack = []; dictionary = State.get_standard_dict (); for_counters = [] } in
   let state = mode.files |> run_files mode typestate state in
   match state with
   | Ok (state, typestate) -> 

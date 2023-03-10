@@ -13,6 +13,12 @@ module Ftype = struct
   let eq t1 t2 = t1 = t2 || t1 = TAny || t2 = TAny
   let ( == ) = eq
 
+  let gen_eq t1 t2 =
+    match (t1, t2) with
+    | _, TGen _ -> true
+    | TGen _, _ -> true
+    | _ -> eq t1 t2
+
   let rec to_string = function
     | TAny -> "TAny"
     | TGen s -> Printf.sprintf "TGen(%s)" s

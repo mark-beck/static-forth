@@ -5,7 +5,7 @@ type implementation =
   | Builtin of (state -> state)
   | User of Parser.astnode list
 
-and state = { stack : Vtype.t list; dictionary : dictionary_value SMap.t }
+and state = { stack : Vtype.t list; dictionary : dictionary_value SMap.t; for_counters : int list }
 
 and dictionary_value = {
   name : string;
@@ -21,6 +21,26 @@ let print_stack stack =
 let show_stack stack =
   let joined = String.concat ", " (List.map Vtype.to_string stack) in
   Printf.sprintf "Stack: [ %s ]" joined
+
+let get_for_counter state =
+  match state.for_counters with
+  | x :: _ -> x
+  | _ -> raise @@ Failure "No for counter 1"
+
+let pop_for_counter state =
+  match state.for_counters with
+  | _ :: xs -> { state with for_counters = xs }
+  | _ -> raise @@ Failure "No for counter 2"
+
+let push_for_counter state =
+  match state.stack with
+  | VNumber x :: xs -> { state with stack = xs; for_counters = x :: state.for_counters }
+  | _ -> raise @@ Failure "Stack underflow"
+
+let dec_for_counter state =
+  match state.for_counters with
+  | x :: xs -> { state with for_counters = x - 1 :: xs }
+  | _ -> raise @@ Failure "No for counter 3"
 
 let add_word (worddef : Parser.worddef) state =
   let word =
@@ -113,6 +133,30 @@ let get_standard_dict () =
         out_types = [ TBool ];
       };
       {
+        name = "lt";
+        impl =
+          Builtin
+            (fun state ->
+              match state.stack with
+              | VNumber a :: VNumber b :: xs ->
+                  { state with stack = VBool (a < b) :: xs }
+              | _ -> raise @@ Failure "Stack underflow");
+        in_types = [ TNumber; TNumber ];
+        out_types = [ TBool ];
+      };
+      {
+        name = "gt";
+        impl =
+          Builtin
+            (fun state ->
+              match state.stack with
+              | VNumber a :: VNumber b :: xs ->
+                  { state with stack = VBool (a > b) :: xs }
+              | _ -> raise @@ Failure "Stack underflow");
+        in_types = [ TNumber; TNumber ];
+        out_types = [ TBool ];
+      };
+      {
         name = "not";
         impl =
           Builtin
@@ -162,10 +206,10 @@ let get_standard_dict () =
           Builtin
             (fun state ->
               match state.stack with
-              | a :: b :: xs -> { state with stack = a :: b :: a :: xs }
+              | a :: b :: xs -> { state with stack = b :: a :: b :: xs }
               | _ -> raise @@ Failure "Stack underflow");
         in_types = [ TGen "a"; TGen "b" ];
-        out_types = [ TGen "a"; TGen "b"; TGen "a" ];
+        out_types = [ TGen "b"; TGen "a"; TGen "b" ];
       };
       {
         name = "rot3";
@@ -173,10 +217,10 @@ let get_standard_dict () =
           Builtin
             (fun state ->
               match state.stack with
-              | a :: b :: c :: xs -> { state with stack = b :: c :: a :: xs }
+              | a :: b :: c :: xs -> { state with stack = c :: a :: b :: xs }
               | _ -> raise @@ Failure "Stack underflow");
         in_types = [ TGen "a"; TGen "b"; TGen "c" ];
-        out_types = [ TGen "b"; TGen "c"; TGen "a" ];
+        out_types = [ TGen "c"; TGen "a"; TGen "b" ];
       };
       {
         name = "rot4";
@@ -185,10 +229,10 @@ let get_standard_dict () =
             (fun state ->
               match state.stack with
               | a :: b :: c :: d :: xs ->
-                  { state with stack = b :: c :: d :: a :: xs }
+                  { state with stack = d :: a :: b :: c :: xs }
               | _ -> raise @@ Failure "Stack underflow");
         in_types = [ TGen "a"; TGen "b"; TGen "c"; TGen "d" ];
-        out_types = [ TGen "b"; TGen "c"; TGen "d"; TGen "a" ];
+        out_types = [ TGen "d"; TGen "a"; TGen "b"; TGen "c" ];
       };
       {
         name = "print";
