@@ -16,6 +16,24 @@ type program_text = {
   current_position : int;
 }
 
+let show = function
+  | Number n -> Printf.sprintf "Number: %d" n
+  | String s -> Printf.sprintf "\"%s\"" s
+  | Word w -> Printf.sprintf "%s" w
+  | IF -> Printf.sprintf "IF"
+  | ENDIF -> Printf.sprintf "ENDIF"
+  | WHILE -> Printf.sprintf "WHILE"
+  | ENDWHILE -> Printf.sprintf "ENDWHILE"
+  | Colon -> Printf.sprintf ":"
+  | Semicolon -> Printf.sprintf ";"
+  | EOF -> Printf.sprintf "EOF"
+
+let show_tokens tokens =
+  "[ " ^ (tokens |> List.map show |> String.concat ", ") ^ " ]"
+
+let print_tokens tokens =
+  Printf.printf "Lexed tokens: %s\n" (show_tokens tokens)
+
 exception LexerError of string * program_text
 
 let current program_text =
@@ -61,7 +79,7 @@ let check_is_word word text =
 
 let rec lex text res =
   match current text with
-  | Some ' ' -> lex (next text) res
+  | Some ' ' | Some '\n' -> lex (next text) res
   | Some ':' -> lex (next text) (Colon :: res)
   | Some ';' -> lex (next text) (Semicolon :: res)
   | Some '0' .. '9' ->

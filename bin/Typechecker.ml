@@ -29,6 +29,11 @@ module Typestate = struct
     print_string "TypeStack: [";
     stack |> List.map Ftype.to_string |> String.concat " " |> print_string;
     print_endline "]"
+
+  let show_stack stack =
+    "["
+    ^ (stack |> List.map Ftype.to_string |> String.concat " ")
+    ^ "]"
 end
 
 let resolve_poly_types typestack types_in =

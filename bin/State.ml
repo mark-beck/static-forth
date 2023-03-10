@@ -18,6 +18,10 @@ let print_stack stack =
   let joined = String.concat ", " (List.map Vtype.to_string stack) in
   Printf.printf "Stack: [ %s ]" joined
 
+let show_stack stack =
+  let joined = String.concat ", " (List.map Vtype.to_string stack) in
+  Printf.sprintf "Stack: [ %s ]" joined
+
 let add_word (worddef : Parser.worddef) state =
   let word =
     {

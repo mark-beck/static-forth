@@ -1,5 +1,7 @@
 open Types
 
+exception ParseError of string
+
 type worddef = {
   name : string;
   types_in : Ftype.t list;
@@ -16,54 +18,18 @@ and astnode =
   | Ifelse of (astnode list * astnode list)
   | While of astnode list
 
-let display_nodes =
-  let rec display_node (node : astnode) =
-    match node with
-    | Worddef worddef ->
-        Printf.printf "Worddef %s [" worddef.name;
-        List.iter
-          (fun token ->
-            display_node token;
-            Printf.printf " ")
-          worddef.nodes;
-        Printf.printf "]"
-    | Wordcall word -> Printf.printf "Wordcall %s" word
-    | String str -> Printf.printf "String %s" str
-    | Number num -> Printf.printf "Number %d" num
-    | If nodes ->
-        Printf.printf "If [";
-        List.iter
-          (fun node ->
-            display_node node;
-            Printf.printf " ")
-          nodes;
-        Printf.printf "]"
-    | Ifelse (nodes1, nodes2) ->
-        Printf.printf "Ifelse [";
-        List.iter
-          (fun node ->
-            display_node node;
-            Printf.printf " ")
-          nodes1;
-        Printf.printf "] [";
-        List.iter
-          (fun node ->
-            display_node node;
-            Printf.printf " ")
-          nodes2;
-        Printf.printf "]"
-    | While nodes ->
-        Printf.printf "While [";
-        List.iter
-          (fun node ->
-            display_node node;
-            Printf.printf " ")
-          nodes;
-        Printf.printf "]"
-  in
-  List.iter (fun node ->
-      display_node node;
-      Printf.printf "\n")
+let rec show_nodes nodes = 
+  "[ " ^ (nodes |> List.map (function
+  | Worddef worddef -> Printf.sprintf "Worddef %s %s" worddef.name (show_nodes worddef.nodes)
+  | Wordcall word -> Printf.sprintf "Wordcall %s" word
+  | String str -> Printf.sprintf "String %s" str
+  | Number num -> Printf.sprintf "Number %d" num
+  | If nodes -> Printf.sprintf "If %s" (show_nodes nodes)
+  | Ifelse (nodes1, nodes2) -> Printf.sprintf "Ifelse %s %s" (show_nodes nodes1) (show_nodes nodes2)
+  | While nodes -> Printf.sprintf "While %s" (show_nodes nodes)
+  ) |> String.concat ", ") ^ " ]"
+
+let print_nodes nodes = Printf.printf "Parsed nodes: %s\n" (show_nodes nodes)
 
 let get pos tokens = try Option.some @@ List.nth tokens pos with _ -> None
 
@@ -71,7 +37,7 @@ let rec parse_worddef (tokens : Lexer.t list) pos =
   let word_beeing_defined =
     match get pos tokens with
     | Some (Lexer.Word word) -> word
-    | _ -> raise @@ Failure "Expected identifier after ':'"
+    | _ -> raise @@ ParseError "Expected identifier after ':'"
   in
   let rec loop tokens pos body =
     match get pos tokens with
@@ -96,9 +62,9 @@ let rec parse_worddef (tokens : Lexer.t list) pos =
               types_out = [];
               nodes = List.rev body;
             } )
-    | Some Lexer.EOF -> raise @@ Failure "Unexpected EOF"
-    | Some _ -> raise @@ Failure "Unexpected token"
-    | None -> raise @@ Failure "OUT OF TOKENS"
+    | Some Lexer.EOF -> raise @@ ParseError "Unexpected EOF"
+    | Some _ -> raise @@ ParseError "Unexpected token"
+    | None -> raise @@ ParseError "OUT OF TOKENS"
   in
   loop tokens (pos + 1) []
 
@@ -118,9 +84,9 @@ and parse_if tokens pos =
         let pos, node = parse_worddef tokens pos in
         loop tokens pos (node :: body)
     | Some Lexer.ENDIF -> (pos + 1, If (List.rev body))
-    | Some Lexer.EOF -> raise @@ Failure "Unexpected EOF"
-    | Some _ -> raise @@ Failure "Unexpected token"
-    | None -> raise @@ Failure "OUT OF TOKENS"
+    | Some Lexer.EOF -> raise @@ ParseError "Unexpected EOF"
+    | Some _ -> raise @@ ParseError "Unexpected token"
+    | None -> raise @@ ParseError "OUT OF TOKENS"
   in
   loop tokens pos []
 
@@ -140,9 +106,9 @@ and parse_while tokens pos =
         let pos, node = parse_worddef tokens pos in
         loop tokens pos (node :: body)
     | Some Lexer.ENDWHILE -> (pos + 1, While (List.rev body))
-    | Some Lexer.EOF -> raise @@ Failure "Unexpected EOF"
-    | Some _ -> raise @@ Failure "Unexpected token"
-    | None -> raise @@ Failure "OUT OF TOKENS"
+    | Some Lexer.EOF -> raise @@ ParseError "Unexpected EOF"
+    | Some _ -> raise @@ ParseError "Unexpected token"
+    | None -> raise @@ ParseError "OUT OF TOKENS"
   in
   loop tokens pos []
 
@@ -164,7 +130,7 @@ and parse_statement tokens pos nodes =
       let pos, node = parse_worddef tokens (pos + 1) in
       parse_statement tokens pos (node :: nodes)
   | Some Lexer.EOF -> List.rev nodes
-  | Some _ -> raise @@ Failure "Unexpected token"
-  | None -> raise @@ Failure "OUT OF TOKENS"
+  | Some _ -> raise @@ ParseError "Unexpected token"
+  | None -> raise @@ ParseError "OUT OF TOKENS"
 
 and parse tokens = parse_statement tokens 0 []
